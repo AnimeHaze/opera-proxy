@@ -29,9 +29,6 @@ import (
 	clog "github.com/Snawoot/opera-proxy/log"
 	"github.com/Snawoot/opera-proxy/resolver"
 	se "github.com/Snawoot/opera-proxy/seclient"
-
-	_ "golang.org/x/crypto/x509roots/fallback"
-	"golang.org/x/crypto/x509roots/fallback/bundle"
 )
 
 const (
@@ -230,31 +227,28 @@ func run() int {
 		KeepAlive: 30 * time.Second,
 	}
 
-	caPool := x509.NewCertPool()
-	if args.caFile != "" {
-		certs, err := ioutil.ReadFile(args.caFile)
-		if err != nil {
-			mainLogger.Error("Can't load CA file: %v", err)
-			return 15
-		}
-		if ok := caPool.AppendCertsFromPEM(certs); !ok {
-			mainLogger.Error("Can't load certificates from CA file")
-			return 15
-		}
-	} else {
-		for c := range bundle.Roots() {
-			cert, err := x509.ParseCertificate(c.Certificate)
-			if err != nil {
-				mainLogger.Error("Unable to parse bundled certificate: %v", err)
-				return 15
-			}
-			if c.Constraint == nil {
-				caPool.AddCert(cert)
-			} else {
-				caPool.AddCertWithConstraint(cert, c.Constraint)
-			}
-		}
-	}
+  var caPool *x509.CertPool
+  var err error
+
+  if args.caFile != "" {
+      caPool = x509.NewCertPool()
+      certs, err := ioutil.ReadFile(args.caFile)
+      if err != nil {
+          mainLogger.Error("Can't load CA file: %v", err)
+          return 15
+      }
+      if ok := caPool.AppendCertsFromPEM(certs); !ok {
+          mainLogger.Error("Can't load certificates from CA file")
+          return 15
+      }
+  } else {
+      // Use system certificate pool for Go 1.20 compatibility
+      caPool, err = x509.SystemCertPool()
+      if err != nil {
+          mainLogger.Error("Unable to load system certificate pool: %v", err)
+          return 15
+      }
+  }
 
 	xproxy.RegisterDialerType("http", proxyFromURLWrapper)
 	xproxy.RegisterDialerType("https", proxyFromURLWrapper)
